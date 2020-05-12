@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"helm.sh/helm/v3/pkg/cli"
+
 	"github.com/golang/protobuf/proto"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
@@ -47,14 +49,18 @@ type ReleaseData struct {
 }
 
 var ctx = context.Background()
+var DefaultEnv = &cli.EnvSettings{
+	KubeConfig:  "",
+	KubeContext: "",
+}
 
 // ListReleases lists all releases according to provided options
 func ListReleases(o ListOptions) ([]ReleaseData, error) {
-	return ListReleasesWithKubeConfig(o, "", "")
+	return ListReleasesWithKubeConfig(o, DefaultEnv)
 }
 
 // ListReleasesWithKubeConfig lists all releases according to provided options
-func ListReleasesWithKubeConfig(o ListOptions, kubeConfigFile, context string) ([]ReleaseData, error) {
+func ListReleasesWithKubeConfig(o ListOptions, config *cli.EnvSettings) ([]ReleaseData, error) {
 	if o.TillerNamespace == "" {
 		o.TillerNamespace = "kube-system"
 	}
@@ -64,9 +70,12 @@ func ListReleasesWithKubeConfig(o ListOptions, kubeConfigFile, context string) (
 	if o.ReleaseName != "" {
 		o.TillerLabel += fmt.Sprintf(",NAME=%s", o.ReleaseName)
 	}
-	clientSet := GetClientSetWithKubeConfig(kubeConfigFile, context)
+	clientSet, err := GetClientSetWithConfig(config)
+	if err != nil {
+		return nil, err
+	}
 	var releasesData []ReleaseData
-	storage := GetTillerStorageWithKubeConfig(o.TillerNamespace, kubeConfigFile, context)
+	storage := GetTillerStorageWithKubeConfig(o.TillerNamespace, config)
 	switch storage {
 	case "secrets":
 		secrets, err := clientSet.CoreV1().Secrets(o.TillerNamespace).List(ctx, metav1.ListOptions{
@@ -108,14 +117,14 @@ type ListReleaseNamesInNamespaceOptions struct {
 
 // ListReleaseNamesInNamespace returns a string list of all releases in a provided namespace
 func ListReleaseNamesInNamespace(o ListReleaseNamesInNamespaceOptions) (string, error) {
-	return ListReleaseNamesInNamespaceWithKubeConfig(o, "", "")
+	return ListReleaseNamesInNamespaceWithKubeConfig(o, DefaultEnv)
 }
 
 // ListReleaseNamesInNamespaceWithKubeConfig returns a string list of all releases in a provided namespace
-func ListReleaseNamesInNamespaceWithKubeConfig(o ListReleaseNamesInNamespaceOptions, kubeConfigFile, context string) (string, error) {
+func ListReleaseNamesInNamespaceWithKubeConfig(o ListReleaseNamesInNamespaceOptions, config *cli.EnvSettings) (string, error) {
 	releases, err := ListReleasesWithKubeConfig(ListOptions{
 		TillerNamespace: o.TillerNamespace,
-	}, kubeConfigFile, context)
+	}, config)
 	if err != nil {
 		return "", err
 	}
@@ -185,8 +194,25 @@ func DecodeRelease(data string) (*rspb.Release, error) {
 }
 
 // GetClientSet returns a kubernetes ClientSet
-func GetClientSet() *kubernetes.Clientset {
-	return GetClientSetWithKubeConfig("", "")
+func GetClientSet() (*kubernetes.Clientset, error) {
+	return GetClientSetWithConfig(DefaultEnv)
+}
+
+func GetClientSetWithConfig(config *cli.EnvSettings) (*kubernetes.Clientset, error) {
+	var clientSet *kubernetes.Clientset
+	if config.KubeToken != "" && config.KubeAPIServer != "" {
+		resetConfig, err := config.RESTClientGetter().ToRESTConfig()
+		if err != nil {
+			return nil, err
+		}
+		clientSet, err = kubernetes.NewForConfig(resetConfig)
+		if err != nil {
+			return nil, err
+		}
+		return clientSet, nil
+	}
+	clientSet = GetClientSetWithKubeConfig(config.KubeConfig, config.KubeContext)
+	return clientSet, nil
 }
 
 // GetClientSetWithKubeConfig returns a kubernetes ClientSet
@@ -233,12 +259,15 @@ func buildConfigFromFlags(context string, kubeConfigFiles []string) (*rest.Confi
 
 // GetTillerStorage returns the storage type of tiller (configmaps/secrets)
 func GetTillerStorage(tillerNamespace string) string {
-	return GetTillerStorageWithKubeConfig(tillerNamespace, "", "")
+	return GetTillerStorageWithKubeConfig(tillerNamespace, DefaultEnv)
 }
 
 // GetTillerStorageWithKubeConfig returns the storage type of tiller (configmaps/secrets)
-func GetTillerStorageWithKubeConfig(tillerNamespace, kubeConfigFile, context string) string {
-	clientset := GetClientSetWithKubeConfig(kubeConfigFile, context)
+func GetTillerStorageWithKubeConfig(tillerNamespace string, config *cli.EnvSettings) string {
+	clientset, err := GetClientSetWithConfig(config)
+	if err != nil {
+		return "configmaps" //
+	}
 	coreV1 := clientset.CoreV1()
 	listOptions := metav1.ListOptions{
 		LabelSelector: "name=tiller",
