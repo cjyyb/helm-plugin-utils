@@ -3,6 +3,7 @@ package utils
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/base64"
 	"fmt"
 	"io/ioutil"
@@ -45,6 +46,8 @@ type ReleaseData struct {
 	Manifest  string
 }
 
+var ctx = context.Background()
+
 // ListReleases lists all releases according to provided options
 func ListReleases(o ListOptions) ([]ReleaseData, error) {
 	return ListReleasesWithKubeConfig(o, "", "")
@@ -66,7 +69,7 @@ func ListReleasesWithKubeConfig(o ListOptions, kubeConfigFile, context string) (
 	storage := GetTillerStorageWithKubeConfig(o.TillerNamespace, kubeConfigFile, context)
 	switch storage {
 	case "secrets":
-		secrets, err := clientSet.CoreV1().Secrets(o.TillerNamespace).List(metav1.ListOptions{
+		secrets, err := clientSet.CoreV1().Secrets(o.TillerNamespace).List(ctx, metav1.ListOptions{
 			LabelSelector: o.TillerLabel,
 		})
 		if err != nil {
@@ -80,7 +83,7 @@ func ListReleasesWithKubeConfig(o ListOptions, kubeConfigFile, context string) (
 			releasesData = append(releasesData, *releaseData)
 		}
 	case "configmaps":
-		configMaps, err := clientSet.CoreV1().ConfigMaps(o.TillerNamespace).List(metav1.ListOptions{
+		configMaps, err := clientSet.CoreV1().ConfigMaps(o.TillerNamespace).List(ctx, metav1.ListOptions{
 			LabelSelector: o.TillerLabel,
 		})
 		if err != nil {
@@ -240,7 +243,7 @@ func GetTillerStorageWithKubeConfig(tillerNamespace, kubeConfigFile, context str
 	listOptions := metav1.ListOptions{
 		LabelSelector: "name=tiller",
 	}
-	pods, err := coreV1.Pods(tillerNamespace).List(listOptions)
+	pods, err := coreV1.Pods(tillerNamespace).List(ctx, listOptions)
 	if err != nil {
 		log.Fatal(err)
 	}
