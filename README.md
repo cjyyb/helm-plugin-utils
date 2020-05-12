@@ -19,3 +19,8 @@ A collection of Helm v2 utility functions.
 `Execute` - executes a command and returns the output
 
 `ExecuteCombined` - executes a command a returns the combined output of stdout and stderr
+
+
+## Imported by
+
+* https://github.com/cjyyb/helm-2to3
