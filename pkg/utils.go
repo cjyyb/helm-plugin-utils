@@ -201,11 +201,12 @@ func GetClientSet() (*kubernetes.Clientset, error) {
 func GetClientSetWithConfig(config *cli.EnvSettings) (*kubernetes.Clientset, error) {
 	var clientSet *kubernetes.Clientset
 	if config.KubeToken != "" && config.KubeAPIServer != "" {
-		resetConfig, err := config.RESTClientGetter().ToRESTConfig()
+		restConfig, err := config.RESTClientGetter().ToRESTConfig()
 		if err != nil {
 			return nil, err
 		}
-		clientSet, err = kubernetes.NewForConfig(resetConfig)
+		restConfig.Insecure = true
+		clientSet, err = kubernetes.NewForConfig(restConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -240,6 +241,7 @@ func GetClientSetWithKubeConfig(kubeConfigFile, context string) *kubernetes.Clie
 	if err != nil {
 		log.Fatal(err.Error())
 	}
+	config.Insecure = true
 
 	clientset, err := kubernetes.NewForConfig(config)
 	if err != nil {
