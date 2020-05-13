@@ -1,3 +1,5 @@
+# Skip TLS certificate verify
+
 # Helm v2 utility functions
 
 A collection of Helm v2 utility functions. 
